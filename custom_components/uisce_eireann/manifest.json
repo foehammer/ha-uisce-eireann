@@ -1,12 +1,12 @@
 {
   "domain": "uisce_eireann",
   "name": "Uisce Éireann Water Outages",
-  "codeowners": ["@YOUR_GITHUB_USER"],
+  "codeowners": ["@foehammer"],
   "config_flow": true,
-  "documentation": "https://github.com/YOUR_GITHUB_USER/ha-uisce-eireann",
+  "documentation": "https://github.com/foehammer/ha-uisce-eireann",
   "integration_type": "service",
   "iot_class": "cloud_polling",
-  "issue_tracker": "https://github.com/YOUR_GITHUB_USER/ha-uisce-eireann/issues",
+  "issue_tracker": "https://github.com/foehammer/ha-uisce-eireann/issues",
   "loggers": ["custom_components.uisce_eireann"],
   "requirements": [],
   "version": "0.1.0"
