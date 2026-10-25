@@ -1,0 +1,44 @@
+{
+  "config": {
+    "step": {
+      "user": {
+        "title": "Monitor water outages near a location",
+        "description": "Pick a point and a radius. Notices published on water.ie within the circle will be tracked.",
+        "data": {
+          "name": "Name",
+          "location": "Location and radius"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Could not reach the Uisce Éireann outage feed. Try again later."
+    },
+    "abort": {
+      "already_configured": "This location is already being monitored."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Outage monitoring options",
+        "data": {
+          "radius": "Radius",
+          "scan_interval": "Update interval",
+          "include_closed": "Include closed notices in the attributes"
+        },
+        "data_description": {
+          "include_closed": "Closed notices never count towards the sensors; this only lists them alongside open ones."
+        }
+      }
+    }
+  },
+  "entity": {
+    "binary_sensor": {
+      "active": { "name": "Outage nearby" }
+    },
+    "sensor": {
+      "notices": { "name": "Open notices" },
+      "nearest": { "name": "Nearest notice" }
+    }
+  }
+}

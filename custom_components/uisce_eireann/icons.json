@@ -1,0 +1,11 @@
+{
+  "entity": {
+    "binary_sensor": {
+      "active": { "default": "mdi:water-off", "state": { "off": "mdi:water-check" } }
+    },
+    "sensor": {
+      "notices": { "default": "mdi:water-alert" },
+      "nearest": { "default": "mdi:map-marker-distance" }
+    }
+  }
+}
