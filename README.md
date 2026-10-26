@@ -22,6 +22,8 @@ Two events fire on the HA event bus:
 - `uisce_eireann_notice_new` when an open notice appears in range
 - `uisce_eireann_notice_cleared` when one closes, is dropped from the feed, or leaves the radius
 
+Both events are detected by polling, so they fire up to one update interval after the feed changes (15 minutes by default). The first poll after a restart or reload fires no events, so existing notices aren't reported as new. Each event carries the notice fields above plus `name` (the name you gave the location) and `config_entry_id`.
+
 ## Installation (HACS)
 
 1. HACS → ⋮ → **Custom repositories** → add this repository's URL, category **Integration**.
@@ -33,26 +35,83 @@ Add the integration again for each extra place you care about (work, a relative'
 
 **Options:** radius (500 m to 100 km), update interval (5 to 240 min, default 15), and whether closed notices are listed in the attributes. Closed notices never count towards the sensors.
 
-## Example automation
+## Example automations
+
+### Notify when a new notice appears
 
 ```yaml
-automation:
-  - alias: Water outage notice near home
-    triggers:
-      - trigger: event
-        event_type: uisce_eireann_notice_new
-        event_data:
-          name: Home
-    actions:
-      - action: notify.mobile_app_phone
-        data:
-          title: "💧 {{ trigger.event.data.category or 'Water notice' }}"
-          message: >
-            {{ trigger.event.data.title }} ({{ trigger.event.data.distance_km }} km).
-            Ref {{ trigger.event.data.reference }}.
+alias: Water outage notice near home
+triggers:
+  - trigger: event
+    event_type: uisce_eireann_notice_new
+    event_data:
+      name: Home
+actions:
+  - action: notify.mobile_app_phone
+    data:
+      title: "💧 {{ trigger.event.data.category or 'Water notice' }}"
+      message: >
+        {{ trigger.event.data.title }} ({{ trigger.event.data.distance_km }} km).
+        {{ trigger.event.data.description or 'No description provided.' }}
+        Ref {{ trigger.event.data.reference }}.
 ```
 
+Paste these into Settings → Automations → ⋮ → **Edit in YAML**. If you keep automations in `automations.yaml`, add a `- ` before `alias:` and indent the rest by two spaces.
+
+`event_data: name:` must match the name you gave the location when adding the integration (case and spacing included), or the automation never fires. Remove the `event_data` block to trigger for every monitored location.
+
 To ignore non-disruptive works, add a condition on `trigger.event.data.category`.
+
+### Notify when a notice clears
+
+```yaml
+alias: Water outage notice cleared near home
+triggers:
+  - trigger: event
+    event_type: uisce_eireann_notice_cleared
+    event_data:
+      name: Home
+actions:
+  - action: notify.mobile_app_phone
+    data:
+      title: "✅ Water notice cleared"
+      message: >
+        {{ trigger.event.data.title }} (Ref {{ trigger.event.data.reference }})
+        is no longer listed. Closures lag behind the works, so supply may have returned earlier.
+```
+
+### Daily summary of the latest notice
+
+The open notices sensor lists up to 20 notices in its `notices` attribute, nearest first. This picks the one with the latest `start`. Adjust the entity ID and notify service to match yours.
+
+```yaml
+alias: Latest water notice near home
+triggers:
+  - trigger: time
+    at: "08:00:00"
+conditions:
+  - condition: numeric_state
+    entity_id: sensor.water_outages_home_open_notices
+    above: 0
+actions:
+  - variables:
+      latest: >
+        {{ state_attr('sensor.water_outages_home_open_notices', 'notices')
+           | selectattr('status', 'eq', 'Open')
+           | selectattr('start', 'ne', none)
+           | sort(attribute='start', reverse=true)
+           | first }}
+  - action: notify.mobile_app_phone
+    data:
+      title: "💧 {{ latest.category or 'Water notice' }}"
+      message: >
+        {{ latest.title }} ({{ latest.distance_km }} km away).
+        {{ latest.description or 'No description provided.' }}
+        Started {{ as_timestamp(latest.start) | timestamp_custom('%d %b %H:%M') }}.
+        Ref {{ latest.reference }}.
+```
+
+"Most recent" means most recently published or edited (see the note on start/end below), not when the outage began. Descriptions are shortened to a fixed length with "…".
 
 ## How it works, and the data's quirks
 
