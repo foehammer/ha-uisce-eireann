@@ -1,0 +1,46 @@
+name: Release
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  release:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check tag, manifest version and changelog agree
+        run: |
+          python3 - <<'PY'
+          import json, os, re, sys
+
+          tag = os.environ["GITHUB_REF_NAME"]
+          if not re.fullmatch(r"v\d+\.\d+\.\d+", tag):
+              sys.exit(f"Tag {tag!r} is not of the form vX.Y.Z")
+          version = tag[1:]
+
+          manifest = json.load(open("custom_components/uisce_eireann/manifest.json", encoding="utf-8"))
+          if manifest["version"] != version:
+              sys.exit(f"manifest.json version {manifest['version']} does not match tag {tag}")
+
+          changelog = open("CHANGELOG.md", encoding="utf-8").read()
+          match = re.search(
+              rf"^## \[{re.escape(version)}\][^\n]*\n(.*?)(?=^## \[|^\[[^\]]+\]: )",
+              changelog,
+              re.S | re.M,
+          )
+          if not match or not match.group(1).strip():
+              sys.exit(f"CHANGELOG.md has no entry for {version}")
+
+          open("release-notes.md", "w", encoding="utf-8").write(match.group(1).strip() + "\n")
+          PY
+
+      - name: Publish GitHub release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" --title "$GITHUB_REF_NAME" --notes-file release-notes.md --verify-tag
