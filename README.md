@@ -35,6 +35,25 @@ Add the integration again for each extra place you care about (work, a relative'
 
 **Options:** radius (500 m to 100 km), update interval (5 to 240 min, default 15), and whether closed notices are listed in the attributes. Closed notices never count towards the sensors.
 
+## Showing notices on a map
+
+The integration creates the pins, but Home Assistant's built-in **Map** panel in the sidebar only shows people, zones and device trackers, so the pins won't appear there. To see them, add a **Map card** to a dashboard and tell it to include this integration's `geo_location` source:
+
+```yaml
+type: map
+geo_location_sources:
+  - uisce_eireann
+entities:
+  - zone.home
+auto_fit: true
+```
+
+- `zone.home` is optional. It puts your home on the map so you can see how close each notice is.
+- A new notice gets its pin on the next poll (up to 15 minutes by default, see **Options**), and the pin disappears when the notice clears.
+- Notices the feed publishes without coordinates can't be pinned. They still count towards the sensors.
+- Each pin's state is its distance from the monitored location in km, and its attributes hold the notice details listed above.
+- If you monitor several locations, one card shows the pins from all of them.
+
 ## Example automations
 
 ### Notify when a new notice appears
@@ -123,6 +142,10 @@ actions:
 - If the feed is unreachable, the entities go **unavailable** rather than reporting "no outage".
 
 The data-quality findings above come from the [baz8080/uisce](https://github.com/baz8080/uisce) project, which archives this feed.
+
+## Versions and changelog
+
+Releases use [Semantic Versioning](https://semver.org) (`MAJOR.MINOR.PATCH`) and are tagged `vX.Y.Z`. Every release is listed in [CHANGELOG.md](CHANGELOG.md) and on the [Releases page](https://github.com/foehammer/ha-uisce-eireann/releases). HACS shows the new version and its notes when an update is available. Maintainers: see [RELEASING.md](RELEASING.md).
 
 ## Development
 
