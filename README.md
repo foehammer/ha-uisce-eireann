@@ -11,11 +11,13 @@ For each monitored location (default: your Home zone, 5 km radius):
 | Entity | What it shows |
 |---|---|
 | `binary_sensor.water_outages_<name>_outage_nearby` | On while any open notice is within the radius |
-| `sensor.water_outages_<name>_open_notices` | Number of open notices; attributes list them nearest first (up to 20) |
+| `sensor.water_outages_<name>_open_notices` | Number of open notices; attributes list them nearest first (up to 10, with a shortened `description`) |
 | `sensor.water_outages_<name>_nearest_notice` | Distance in km to the nearest open notice |
 | `geo_location.*` (source `uisce_eireann`) | One map pin per open notice, created and removed as notices come and go |
 
-Each notice carries: `reference`, `title`, `category` (e.g. "Burst Water Main"), `status`, `county`, `location`, `work_type`, `start`, `end`, `distance_km`, `pins`, `description`.
+Each notice carries: `reference`, `title`, `category` (e.g. "Burst Water Main"), `status`, `county`, `location`, `work_type`, `start`, `end`, `distance_km`, `pins`, `description`, `priority`, `affected_premises`, `contact`, `traffic_implications`, `conditions`.
+
+`description` is the notice text from water.ie as plain text, with line breaks and without the HTML. It is cut at a sentence boundary: 500 characters on events, pins and the nearest-notice sensor, 150 in the open notices list. `conditions` is a list of the flags set on the notice, any of `water_outage`, `reduced_pressure`, `water_restrictions`, `discolouration`, `boil_water_notice`, `do_not_drink`, `pollution` and `traffic_disruptions`. `priority`, `affected_premises`, `contact` and `traffic_implications` are often empty.
 
 Two events fire on the HA event bus:
 
@@ -101,7 +103,7 @@ actions:
 
 ### Daily summary of the latest notice
 
-The open notices sensor lists up to 20 notices in its `notices` attribute, nearest first. This picks the one with the latest `start`. Adjust the entity ID and notify service to match yours.
+The open notices sensor lists up to 10 notices in its `notices` attribute, nearest first. This picks the one with the latest `start`. Adjust the entity ID and notify service to match yours.
 
 ```yaml
 alias: Latest water notice near home

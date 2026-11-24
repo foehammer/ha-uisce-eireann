@@ -13,10 +13,13 @@ from custom_components.uisce_eireann.api import (
     deduplicate,
     epoch_ms_to_datetime,
     haversine_km,
+    html_to_text,
+    parse_feature,
+    truncate_text,
 )
 from custom_components.uisce_eireann.const import LAYER_URL
 
-from .conftest import HOME, LAYER_METADATA
+from .conftest import HOME, LAYER_METADATA, feature
 
 
 def test_field_map_resolves_roles() -> None:
@@ -32,6 +35,10 @@ def test_field_map_resolves_roles() -> None:
         "county": "COUNTY",
         "location": "LOCATION",
         "work_type": "WORKTYPE",
+        "priority": "PRIORITY",
+        "contact": "CONTACTDETAILS",
+        "traffic_implications": "TRAFFICIMPLICATIONS",
+        "affected_premises": "AFFECTEDPREMISES",
     }
     assert "LASTUPDATE" in fm.date_fields
     assert fm.max_record_count == 2
@@ -78,6 +85,50 @@ def test_coded_value_status_is_decoded() -> None:
     assert open_n.status == "Open" and open_n.is_open
     assert closed_n.status == "Closed" and not closed_n.is_open
     assert closed_n.attributes["CASESTATUS"] == "Closed"
+
+
+def test_html_to_text_flattens_feed_markup() -> None:
+    raw = (
+        "<b>**Update 4:37pm 13/10/2026**<br><br>\n\xa0\nWorks are complete.</b><br><br>\n"
+        "Burst main &amp; low pressure to Castlebar. <br><br>\n"
+        "Please take note of the following reference number and enter it into the "
+        "search bar should you wish to return for an update: MAY1. <br><br>LA01"
+    )
+    assert html_to_text(raw) == (
+        "Update 4:37pm 13/10/2026\nWorks are complete.\nBurst main & low pressure to Castlebar."
+    )
+    assert html_to_text(None) is None
+    assert html_to_text("  <br> ") is None
+
+
+def test_truncate_prefers_sentence_boundary() -> None:
+    text = "First sentence here. Second sentence is much longer than the limit allows."
+    assert truncate_text(text, 30) == "First sentence here. …"
+    assert truncate_text(text, 500) == text
+    assert truncate_text(None, 10) is None
+    assert truncate_text("x" * 50, 10) == "x" * 9 + "…"
+
+
+def test_description_not_stolen_by_contact_details(hass: HomeAssistant) -> None:
+    """Regression: CONTACTDETAILS precedes DESCRIPTION and also matches 'detail'."""
+    fm = FieldMap.from_layer(LAYER_METADATA)
+    assert fm.get("description") == "DESCRIPTION"
+    assert fm.get("contact") == "CONTACTDETAILS"
+
+
+def test_parse_feature_exposes_new_fields() -> None:
+    fm = FieldMap.from_layer(LAYER_METADATA)
+    n = parse_feature(feature(1, 53.8, -9.3), fm)
+    assert n.description.startswith("Update 4:37pm\nSupply is returning.")
+    assert "<" not in n.description and "&amp;" not in n.description
+    assert "reference number" not in n.description and "LA01" not in n.description
+    assert n.priority == "Medium"
+    assert n.affected_premises == 120
+    assert n.contact is None and n.traffic_implications is None
+    assert n.conditions == ("water_outage", "discolouration")
+    summary = n.summary(500)
+    assert summary["conditions"] == ["water_outage", "discolouration"]
+    assert summary["affected_premises"] == 120
 
 
 def test_field_map_rejects_empty_metadata() -> None:

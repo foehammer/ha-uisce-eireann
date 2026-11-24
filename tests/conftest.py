@@ -24,6 +24,12 @@ LAYER_METADATA: dict[str, Any] = {
     "fields": [
         {"name": "OBJECTID", "type": "esriFieldTypeOID", "alias": "OBJECTID"},
         {"name": "TITLE", "type": "esriFieldTypeString", "alias": "Title"},
+        # Same order as the live layer: CONTACTDETAILS precedes DESCRIPTION and
+        # also matches a loose "detail" pattern.
+        {"name": "CONTACTDETAILS", "type": "esriFieldTypeString", "alias": "Contact"},
+        {"name": "AFFECTEDPREMISES", "type": "esriFieldTypeSmallInteger", "alias": "Affected"},
+        {"name": "TRAFFICIMPLICATIONS", "type": "esriFieldTypeString", "alias": "Traffic"},
+        {"name": "PRIORITY", "type": "esriFieldTypeString", "alias": "Priority"},
         {"name": "DESCRIPTION", "type": "esriFieldTypeString", "alias": "Description"},
         {"name": "STATUS", "type": "esriFieldTypeString", "alias": "Status"},
         {"name": "REFERENCENUM", "type": "esriFieldTypeString", "alias": "Reference"},
@@ -34,6 +40,8 @@ LAYER_METADATA: dict[str, Any] = {
         {"name": "ENDDATE", "type": "esriFieldTypeDate", "alias": "End"},
         {"name": "LASTUPDATE", "type": "esriFieldTypeDate", "alias": "Last Update"},
         {"name": "WATEROUTAGE", "type": "esriFieldTypeSmallInteger", "alias": "Outage"},
+        {"name": "BOILWATERNOTICE", "type": "esriFieldTypeSmallInteger", "alias": "Boil"},
+        {"name": "DISCOLOURATION", "type": "esriFieldTypeSmallInteger", "alias": "Discolour"},
     ],
 }
 
@@ -61,7 +69,17 @@ def feature(
         "attributes": {
             "OBJECTID": oid,
             "TITLE": title,
-            "DESCRIPTION": "Repairs to a burst water main may cause supply disruptions.",
+            "CONTACTDETAILS": "",
+            "AFFECTEDPREMISES": 120,
+            "TRAFFICIMPLICATIONS": "",
+            "PRIORITY": "Medium",
+            "DESCRIPTION": (
+                "<b>**Update 4:37pm**<br><br>\n\xa0\nSupply is returning.</b><br><br>\n"
+                "Repairs to a burst water main may cause supply disruptions &amp; low pressure"
+                " to Castlebar. <br><br>\nWorks run until 2pm. <br><br>\n"
+                "Please take note of the following reference number and enter it into the "
+                f"search bar should you wish to return for an update: MAY{oid:08d}. <br><br>LA01"
+            ),
             "STATUS": status,
             "REFERENCENUM": ref if ref is not None else f"MAY{oid:08d}",
             "COUNTY": "Mayo",
@@ -73,6 +91,8 @@ def feature(
             "ENDDATE": ms(datetime(2026, 10, 25, 18, 0, tzinfo=UTC)),
             "LASTUPDATE": None,
             "WATEROUTAGE": 1,
+            "BOILWATERNOTICE": 0,
+            "DISCOLOURATION": 1,
         },
         "geometry": geometry,
     }

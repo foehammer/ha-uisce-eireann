@@ -40,6 +40,10 @@ async def async_get_config_entry_diagnostics(
                     "county",
                     "location",
                     "work_type",
+                    "priority",
+                    "contact",
+                    "traffic_implications",
+                    "affected_premises",
                 }
                 - set(fields.roles)
             )
