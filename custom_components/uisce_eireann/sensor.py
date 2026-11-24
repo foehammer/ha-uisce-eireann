@@ -14,7 +14,7 @@ from homeassistant.core import HomeAssistant
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
 
 from . import UisceConfigEntry
-from .const import MAX_DESCRIPTION_LENGTH, MAX_NOTICES_IN_ATTRIBUTES
+from .const import MAX_DESCRIPTION_LENGTH, MAX_LIST_DESCRIPTION_LENGTH, MAX_NOTICES_IN_ATTRIBUTES
 from .entity import UisceEntity
 
 
@@ -52,7 +52,8 @@ class UisceNoticeCountSensor(UisceEntity, SensorEntity):
             "last_fetched": data.fetched_at.isoformat() if data.fetched_at else None,
             "total_in_range": len(data.notices),
             "notices": [
-                n.summary(MAX_DESCRIPTION_LENGTH) for n in data.notices[:MAX_NOTICES_IN_ATTRIBUTES]
+                n.summary(MAX_LIST_DESCRIPTION_LENGTH)
+                for n in data.notices[:MAX_NOTICES_IN_ATTRIBUTES]
             ],
         }
 

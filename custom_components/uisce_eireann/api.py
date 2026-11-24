@@ -11,6 +11,7 @@ list the service returns, and anything unmatched is still exposed raw.
 from __future__ import annotations
 
 import asyncio
+import html
 import logging
 import math
 import re
@@ -30,6 +31,7 @@ DEFAULT_PAGE_SIZE = 1000
 MAX_PAGES = 50
 
 STRING_TYPES = {"esriFieldTypeString"}
+INTEGER_TYPES = {"esriFieldTypeSmallInteger", "esriFieldTypeInteger", "esriFieldTypeBigInteger"}
 DATE_TYPES = {"esriFieldTypeDate", "esriFieldTypeDateOnly", "esriFieldTypeTimestampOffset"}
 
 # Roles resolved from layer metadata, in resolution order. Each entry is
@@ -40,11 +42,38 @@ _ROLE_RULES: tuple[tuple[str, set[str], tuple[str, ...], str], ...] = (
     ("end", DATE_TYPES, ("ENDDATE",), r"\bend|end.?date|finish"),
     ("status", STRING_TYPES, (), r"status"),
     ("title", STRING_TYPES, (), r"title|heading|subject"),
-    ("description", STRING_TYPES, (), r"desc|detail|message|comment"),
+    # Exact name first: CONTACTDETAILS also matches "detail" and comes earlier
+    # in the live field list.
+    ("description", STRING_TYPES, ("DESCRIPTION",), r"desc|message|comment"),
     ("reference", STRING_TYPES, (), r"ref"),
     ("county", STRING_TYPES, (), r"county"),
     ("location", STRING_TYPES, (), r"location|area|address|town"),
     ("work_type", STRING_TYPES, (), r"work.?type|outage.?type|planned"),
+    ("priority", STRING_TYPES, ("PRIORITY",), r"priority"),
+    ("contact", STRING_TYPES, ("CONTACTDETAILS",), r"contact"),
+    ("traffic_implications", STRING_TYPES, ("TRAFFICIMPLICATIONS",), r"traffic.?impl"),
+    ("affected_premises", INTEGER_TYPES, ("AFFECTEDPREMISES",), r"affected.?prem"),
+)
+
+# Boolean flag fields on the layer, mapped to the condition name they report.
+_CONDITION_FLAGS: dict[str, str] = {
+    "WATEROUTAGE": "water_outage",
+    "REDUCEDPRESSURE": "reduced_pressure",
+    "WATERRESTRICTIONS": "water_restrictions",
+    "DISCOLOURATION": "discolouration",
+    "BOILWATERNOTICE": "boil_water_notice",
+    "DONOTDRINK": "do_not_drink",
+    "POLLUTION": "pollution",
+    "TRAFFICDISRUPTIONS": "traffic_disruptions",
+}
+
+_BR_TAG = re.compile(r"<\s*br\s*/?\s*>", re.IGNORECASE)
+_BLOCK_END_TAG = re.compile(r"</\s*(p|div|li|h[1-6])\s*>", re.IGNORECASE)
+_ANY_TAG = re.compile(r"<[^>]*>")
+_TRAILING_CODE = re.compile(r"\n?\s*\bLA\d{2}\s*$")
+# Reference boilerplate repeated on every notice; the reference is a field already.
+_REFERENCE_BOILERPLATE = re.compile(
+    r"\n?Please take note of the following reference number[^\n]*", re.IGNORECASE
 )
 
 _TITLE_SPLIT = re.compile(r"\s+[-–—]\s*|\s*[-–—]\s+")
@@ -170,6 +199,11 @@ class Notice:
     county: str | None = None
     location: str | None = None
     work_type: str | None = None
+    priority: str | None = None
+    contact: str | None = None
+    traffic_implications: str | None = None
+    affected_premises: int | None = None
+    conditions: tuple[str, ...] = ()
     start: datetime | None = None
     end: datetime | None = None
     distance_km: float | None = None
@@ -196,9 +230,7 @@ class Notice:
 
     def summary(self, max_description: int | None = None) -> dict[str, Any]:
         """Compact, JSON-safe representation for attributes and events."""
-        description = self.description
-        if description and max_description and len(description) > max_description:
-            description = description[: max_description - 1].rstrip() + "…"
+        description = truncate_text(self.description, max_description)
         return {
             "reference": self.reference,
             "title": self.title,
@@ -207,6 +239,11 @@ class Notice:
             "county": self.county,
             "location": self.location,
             "work_type": self.work_type,
+            "priority": self.priority,
+            "conditions": list(self.conditions),
+            "affected_premises": self.affected_premises,
+            "contact": self.contact,
+            "traffic_implications": self.traffic_implications,
             "start": self.start.isoformat() if self.start else None,
             "end": self.end.isoformat() if self.end else None,
             "distance_km": self.distance_km,
@@ -287,6 +324,42 @@ def _clean_text(value: Any) -> str | None:
     return text or None
 
 
+def html_to_text(value: Any) -> str | None:
+    """Flatten the feed's HTML notice text to plain text with line breaks."""
+    if value is None:
+        return None
+    text = str(value).replace("\xa0", " ").replace("�", " ")
+    text = _BR_TAG.sub("\n", text)
+    text = _BLOCK_END_TAG.sub("\n", text)
+    text = _ANY_TAG.sub("", text)
+    text = html.unescape(text).replace("**", "")
+    text = _REFERENCE_BOILERPLATE.sub("", text)
+    lines = [re.sub(r"[ \t]+", " ", line).strip() for line in text.splitlines()]
+    text = "\n".join(line for line in lines if line)
+    text = _TRAILING_CODE.sub("", text).strip()
+    return text or None
+
+
+def truncate_text(text: str | None, limit: int | None) -> str | None:
+    """Shorten to ``limit`` characters, preferring a sentence or line boundary."""
+    if not text or not limit or len(text) <= limit:
+        return text
+    cut = text[: limit - 1]
+    boundary = max(cut.rfind(". "), cut.rfind(".\n"), cut.rfind("\n"))
+    if boundary >= limit // 2:
+        return cut[: boundary + 1].rstrip() + " …"
+    return cut.rstrip() + "…"
+
+
+def _int_or_none(value: Any) -> int | None:
+    if value is None or isinstance(value, bool):
+        return None
+    try:
+        return int(value)
+    except (TypeError, ValueError):
+        return None
+
+
 def parse_feature(feature: dict[str, Any], fields: FieldMap) -> Notice | None:
     """Turn one ArcGIS feature into a Notice, or None if it is unusable."""
     attrs = feature.get("attributes")
@@ -313,6 +386,13 @@ def parse_feature(feature: dict[str, Any], fields: FieldMap) -> Notice | None:
         name = fields.get(role)
         return epoch_ms_to_datetime(attrs.get(name)) if name else None
 
+    affected_name = fields.get("affected_premises")
+    conditions = tuple(
+        label
+        for name, label in _CONDITION_FLAGS.items()
+        if name in fields.all_fields and _int_or_none(attrs.get(name)) == 1
+    )
+
     point = _geometry_point(feature.get("geometry"))
     return Notice(
         object_id=object_id,
@@ -320,12 +400,17 @@ def parse_feature(feature: dict[str, Any], fields: FieldMap) -> Notice | None:
         longitude=point[1] if point else None,
         attributes=converted,
         title=text("title"),
-        description=text("description"),
+        description=html_to_text(attrs.get(fields.get("description") or "")),
         status=text("status"),
         reference=text("reference"),
         county=text("county"),
         location=text("location"),
         work_type=text("work_type"),
+        priority=text("priority"),
+        contact=text("contact"),
+        traffic_implications=text("traffic_implications"),
+        affected_premises=_int_or_none(attrs.get(affected_name)) if affected_name else None,
+        conditions=conditions,
         start=date("start"),
         end=date("end"),
     )

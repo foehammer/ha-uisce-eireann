@@ -36,7 +36,10 @@ EVENT_NOTICE_NEW: Final = f"{DOMAIN}_notice_new"
 EVENT_NOTICE_CLEARED: Final = f"{DOMAIN}_notice_cleared"
 
 # Keep state attributes well under the recorder's 16 KB limit.
-MAX_NOTICES_IN_ATTRIBUTES: Final = 20
-MAX_DESCRIPTION_LENGTH: Final = 300
+MAX_NOTICES_IN_ATTRIBUTES: Final = 10
+# The list attribute carries many notices, so each gets a shorter description;
+# the full text is on the nearest-notice sensor, geo_location pins and events.
+MAX_LIST_DESCRIPTION_LENGTH: Final = 150
+MAX_DESCRIPTION_LENGTH: Final = 500
 
 GEO_SOURCE: Final = DOMAIN
